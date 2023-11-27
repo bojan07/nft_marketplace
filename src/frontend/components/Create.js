@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { ethers } from "ethers"
 import { Row, Form, Button } from 'react-bootstrap'
 import { create as ipfsHttpClient } from 'ipfs-http-client'
+import FormData from 'form-data'
+import axios from 'axios'
 const client = ipfsHttpClient('https://ipfs.infura.io:5001/api/v0')
 
 const Create = ({ marketplace, nft }) => {
@@ -12,11 +14,32 @@ const Create = ({ marketplace, nft }) => {
   const uploadToIPFS = async (event) => {
     event.preventDefault()
     const file = event.target.files[0]
+    const ipfsUploadUrl = 'https://api.pinata.cloud/pinning/pinFileToIPFS'
+
     if (typeof file !== 'undefined') {
       try {
-        const result = await client.add(file)
-        console.log(result)
-        setImage(`https://ipfs.infura.io/ipfs/${result.path}`)
+        const form = new FormData()
+        form.append('file', file)
+
+        let config = {
+          method: 'post',
+          maxContentLength: Infinity,
+          maxBodyLength: Infinity,
+          url: `${ipfsUploadUrl}`,
+          headers: {
+            Authorization: `Bearer ${process.env.REACT_APP_PINATA_JWT_SECRET}`,
+          },
+          data: form
+        }
+
+        await axios(config)
+          .then((ipfsResponse) => {
+            setImage(`https://pink-wrong-herring-463.mypinata.cloud/ipfs/${ipfsResponse?.data?.IpfsHash}`)
+          })
+          .catch((e) => {
+            console.log('error: ', e.message);
+          })
+
       } catch (error){
         console.log("ipfs image upload error: ", error)
       }
@@ -24,15 +47,34 @@ const Create = ({ marketplace, nft }) => {
   }
   const createNFT = async () => {
     if (!image || !price || !name || !description) return
+
+    const ipfsUploadUrl = 'https://api.pinata.cloud/pinning/pinJSONToIPFS'
+
     try{
-      const result = await client.add(JSON.stringify({image, price, name, description}))
-      mintThenList(result)
+      let config = {
+        method: 'post',
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+        url: `${ipfsUploadUrl}`,
+        headers: {
+          Authorization: `Bearer ${process.env.REACT_APP_PINATA_JWT_SECRET}`,
+        },
+        data: JSON.stringify({image, price, name, description})
+      }
+
+      await axios(config)
+        .then((ipfsResponse) => {
+          mintThenList(ipfsResponse.data)
+        })
+        .catch((e) => {
+          console.log('error: ', e.message);
+        })
     } catch(error) {
       console.log("ipfs uri upload error: ", error)
     }
   }
   const mintThenList = async (result) => {
-    const uri = `https://ipfs.infura.io/ipfs/${result.path}`
+    const uri = `https://pink-wrong-herring-463.mypinata.cloud/ipfs/${result.IpfsHash}`
     // mint nft 
     await(await nft.mint(uri)).wait()
     // get tokenId of new nft 
